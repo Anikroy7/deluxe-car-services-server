@@ -1,6 +1,7 @@
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express');
-const cors = require('cors')
+const cors = require('cors');
+var jwt = require('jsonwebtoken');
 require('dotenv').config()
 const app = express();
 const port = process.env.PORT || 5000;
@@ -18,6 +19,7 @@ async function run() {
 
         await client.connect()
         const serviceCollection = client.db('deluxeCar').collection('service')
+        const orderCollection = client.db('deluxeCar').collection('order');
 
         app.get('/service', async (req, res) => {
             const query = {};
@@ -32,6 +34,33 @@ async function run() {
             const result = await serviceCollection.insertOne(doc)
             res.send(result)
         })
+        app.post('/login', async (req, res) => {
+            const user = req.body;
+            const accsessToken = jwt.sign(user, process.env.ACCSESS_TOKEN_SECRET, { expiresIn: '1d' })
+            res.send({ accsessToken });
+        })
+
+        //  jwt verify function
+
+        function verifyJwt(req, res, next) {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                return res.status(401).send('forbidden accsess')
+            }
+
+            const token = authHeader.split(' ')[1]
+
+            jwt.verify(token, process.env.ACCSESS_TOKEN_SECRET, (err, decoded) => {
+
+                if (err) {
+                    res.status(401).send({ message: 'unauthorized accsess' })
+                }
+                req.decoded = decoded;
+                next();
+            })
+
+        }
+
 
         // DELETE
 
@@ -39,6 +68,25 @@ async function run() {
             const id = req.params.id
             const query = { _id: ObjectId(id) }
             const result = await serviceCollection.deleteOne(query)
+            res.send(result)
+        })
+        app.get('/order', verifyJwt, async (req, res) => {
+            const decodedEmail = req?.decoded?.email;
+            const email = req.query.email;
+            if (decodedEmail === email) {
+                const query = { email };
+                const cursor = orderCollection.find(query);
+                const result = await cursor.toArray()
+                res.send(result)
+            }
+            else {
+                res.status(403).send({ message: 'forbidden accsess' })
+            }
+        })
+
+        app.post('/order', async (req, res) => {
+            const order = req.body;
+            const result = await orderCollection.insertOne(order);
             res.send(result)
         })
 
